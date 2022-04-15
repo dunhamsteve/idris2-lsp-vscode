@@ -22,5 +22,15 @@
     ["(", ")"],
     ["\"", "\""]
   ],
+  "onEnterRules": [
+    {
+      "beforeText": "(do|where|let|of)$",
+      "action": { "indent": "indent" }
+    },
+    {
+      "beforeText": "^\\s+$",
+      "action": { "indent": "outdent" }
+    },
+  ],
   "wordPattern": "(\\??[^\\`\\~\\!\\@\\#\\%\\^\\&\\*\\(\\)\\-\\=\\+\\[\\{\\]\\}\\\\\\|\\;\\:\\\"\\,\\<\\>\\/\\?\\s]+)"
 }
