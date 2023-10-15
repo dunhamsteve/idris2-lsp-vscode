@@ -133,6 +133,7 @@
 					"iPKG",
 					"ipkg"
 				],
+				"configuration": "./language-configuration.json",
 				"extensions": [
 					".ipkg"
 				]

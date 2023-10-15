@@ -16,11 +16,11 @@
     },
     {
       "name": "keyword.control.ipkg",
-      "match": "\\b(package|opts|modules|sourcedir|makefile|objs|executable|main|libs|pkgs|tests)\\b"
+      "match": "\\b(package|depends|opts|modules|sourcedir|makefile|objs|executable|main|libs|pkgs|tests|builddir|outputdir|prebuild|postbuild|preinstall|postinstall|preclean|postclean)\\b"
     },
     {
       "name": "constant.language.ipkg",
-      "match": "\\b(brief|version|readme|license|author|maintainer|homepage|sourceloc|bugtracker)\\b"
+      "match": "\\b(brief|version|readme|license|authors|maintainers|homepage|sourceloc|bugtracker)\\b"
     },
     {
       "name": "string.quoted.double.ipkg",
