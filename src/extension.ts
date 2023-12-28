@@ -9,6 +9,9 @@ import {
   TextEditor,
   MarkdownString,
   DecorationRangeBehavior,
+  Range,
+  CodeAction,
+  QuickPickItem,
 } from 'vscode';
 
 import {
@@ -19,7 +22,7 @@ import {
 } from 'vscode-languageclient/node';
 
 import { Readable } from 'stream';
-import * as process from 'process'
+import * as process from 'process';
 
 const baseName = 'Idris 2 LSP';
 
@@ -57,7 +60,7 @@ export function activate(context: ExtensionContext) {
     showImplicits: extensionConfig.get("showImplicits") || false,
     showMachineNames: extensionConfig.get("showMachineNames") || false,
     fullNamespace: extensionConfig.get("fullNamespace") || false,
-    briefCompletions: extensionConfig.get("briefCompletions") || false,
+    briefCompletions: extensionConfig.get("briefCompletions") ?? true,
   };
   const clientOptions: LanguageClientOptions = {
     documentSelector: [
@@ -91,6 +94,51 @@ function registerCommandHandlersFor(client: LanguageClient, context: ExtensionCo
     },
     rangeBehavior: DecorationRangeBehavior.ClosedClosed
   });
+  context.subscriptions.push(
+    commands.registerTextEditorCommand(
+      'idris2-lsp.action',
+      async (editor: TextEditor, _edit: TextEditorEdit, arg: {command:string}) => {
+        if (editor.document.isDirty) {
+          await editor.document.save();
+          window.showInformationMessage('Saved file');
+        }
+        const res = await commands.executeCommand<CodeAction[]>('vscode.executeCodeActionProvider', editor.document.uri, editor.selection);
+        console.log("ACTIONS:", typeof arg, arg);
+
+        if (arg.command == 'refine') {
+          const intros = res.filter((x) => x.title.startsWith("Intro "));
+          if (intros.length == 1) {
+            workspace.applyEdit(intros[0].edit);
+          } else if (intros.length) {
+            const items: QuickPickItem[] = intros.map((item, index) => ({ label: item.title }));
+            const selected = await window.showQuickPick(items, {
+              placeHolder: 'Select a refinement'
+            });
+            if (selected) {
+              const item = intros.find(x => x.title == selected.label);
+              workspace.applyEdit(item.edit);
+            }
+          } else {
+            window.showInformationMessage('No refinements available');
+          }
+        } else {
+          for (const action of res) {
+            console.log("ACTION",action);
+            if (arg.command == 'case' && (action.title.startsWith("Case split on") || action.title.startsWith('Make case for'))) {
+              workspace.applyEdit(action.edit);
+              break;
+            }
+            if (arg.command == 'with' && action.title.startsWith("Make with for")) {
+              workspace.applyEdit(action.edit);
+              break;
+            }
+            if (arg.command == 'auto' && action.title == 'Add clause') {
+              workspace.applyEdit(action.edit);
+              break;
+            }
+          }
+        }
+      }));
   context.subscriptions.push(
     commands.registerTextEditorCommand(
       'idris2-lsp.repl.eval',
