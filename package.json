@@ -35,6 +35,27 @@
 			{
 				"key": "ctrl+shift+alt+enter",
 				"command": "idris2-lsp.repl.eval"
+			},
+			{
+				"command": "idris2-lsp.action",
+				"key": "ctrl+c ctrl+a",
+				"mac": "ctrl+c ctrl+a",
+				"args": {"command": "auto"},
+				"when": "editorLangId == idris && !editorHasSelection && editorTextFocus"
+			},
+			{
+				"command": "idris2-lsp.action",
+				"key": "ctrl+c ctrl+c",
+				"mac": "ctrl+c ctrl+c",
+				"args": {"command": "case"},
+				"when": "editorLangId == idris && !editorHasSelection && editorTextFocus"
+			},
+			{
+				"command": "idris2-lsp.action",
+				"key": "ctrl+c ctrl+r",
+				"mac": "ctrl+c ctrl+r",
+				"args": {"command": "refine"},
+				"when": "editorLangId == idris && !editorHasSelection && editorTextFocus"
 			}
 		],
 		"commands": [
