@@ -27,6 +27,10 @@
 		"menus": {
 			"commandPalette": [
 				{
+					"command": "idris2-lsp.infoView",
+					"when": "editorLangId == idris"
+				},
+				{
 					"command": "idris2-lsp.repl.eval",
 					"when": "editorLangId == idris"
 				}
@@ -53,10 +57,26 @@
 			},
 			{
 				"command": "idris2-lsp.action",
+				"key": "ctrl+c ctrl+d",
+				"mac": "ctrl+c ctrl+d",
+				"args": {"command": "docs"},
+				"when": "editorLangId == idris && !editorHasSelection && editorTextFocus"
+			},
+			{
+				"command": "idris2-lsp.action",
 				"key": "ctrl+c ctrl+w",
 				"mac": "ctrl+c ctrl+w",
 				"args": {
 					"command": "with"
+				},
+				"when": "editorLangId == idris && !editorHasSelection && editorTextFocus"
+			},
+			{
+				"command": "idris2-lsp.action",
+				"key": "ctrl+c ctrl+l",
+				"mac": "ctrl+c ctrl+l",
+				"args": {
+					"command": "load"
 				},
 				"when": "editorLangId == idris && !editorHasSelection && editorTextFocus"
 			},
@@ -69,6 +89,10 @@
 			}
 		],
 		"commands": [
+			{
+				"command": "idris2-lsp.infoView",
+				"title": "Idris: Open Info View"
+			},
 			{
 				"command": "idris2-lsp.repl.eval",
 				"title": "Idris: Evaluate selection",
@@ -98,32 +122,32 @@
 					"definition": "The log level of the Server."
 				},
 				"idris2-lsp.logFile": {
-					"type" : "string",
+					"type": "string",
 					"default": "stderr",
 					"definition": "Absolute location of the log file for the server."
 				},
 				"idris2-lsp.longActionTimeout": {
-					"type" : "number",
+					"type": "number",
 					"default": 5000,
 					"definition": "Timeout in ms for long actions, e.g. expression search."
 				},
 				"idris2-lsp.maxCodeActionResults": {
-					"type" : "number",
+					"type": "number",
 					"default": 5,
 					"definition": "Maximum number of multiple code actions for a single command, e.g. expression search."
 				},
 				"idris2-lsp.showImplicits": {
-					"type" : "boolean",
+					"type": "boolean",
 					"default": false,
 					"definition": "Show implicits in hovers."
 				},
 				"idris2-lsp.showMachineNames": {
-					"type" : "boolean",
+					"type": "boolean",
 					"default": false,
 					"definition": "Show machine names in hovers."
 				},
 				"idris2-lsp.fullNamespace": {
-					"type" : "boolean",
+					"type": "boolean",
 					"default": false,
 					"definition": "Show full namespace in hovers"
 				},
@@ -198,7 +222,9 @@
 			{
 				"path": "./syntaxes/inject.json",
 				"scopeName": "idris.injection",
-				"injectTo": ["text.html.markdown"],
+				"injectTo": [
+					"text.html.markdown"
+				],
 				"embeddedLanguages": {
 					"meta.embedded.block.idris": "idris"
 				}
@@ -206,11 +232,12 @@
 		]
 	},
 	"scripts": {
-		"vscode:prepublish": "npm run -S esbuild-base -- --minify",
+		"vscode:prepublish": "npm run -S esbuild-base -- --minify && npm run -S esbuild-infoView -- --minify",
 		"compile": "tsc -b",
 		"watch": "tsc -b -w",
 		"esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=out/main.js --external:vscode --format=cjs --platform=node",
-		"esbuild": "npm run -S esbuild-base -- --sourcemap",
+		"esbuild-infoView": "esbuild ./src/infoView.ts --bundle --outfile=out/infoView.js --format=cjs --platform=browser",
+		"esbuild": "npm run -S esbuild-base -- --sourcemap && npm run -S esbuild-infoView -- --sourcemap=inline",
 		"esbuild-watch": "npm run -S esbuild-base -- --sourcemap --watch",
 		"test-compile": "tsc -p ./",
 		"test": "sh ./scripts/e2e.sh"
@@ -219,14 +246,17 @@
 		"vscode-languageclient": "^7.0.0"
 	},
 	"devDependencies": {
+		"@preact/signals": "^1.2.2",
 		"@types/mocha": "^8.2.2",
 		"@types/node": "^12.12.0",
 		"@types/vscode": "^1.36.1",
+		"@types/vscode-webview": "^1.36.1",
 		"@typescript-eslint/eslint-plugin": "^4.21.0",
 		"@typescript-eslint/parser": "^4.21.0",
 		"esbuild": "^0.11.17",
 		"eslint": "^7.23.0",
 		"mocha": "^8.3.2",
+		"preact": "^10.19.3",
 		"typescript": "^4.2.3",
 		"vscode-test": "^1.3.0"
 	}

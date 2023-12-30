@@ -12,6 +12,12 @@ import {
   Range,
   CodeAction,
   QuickPickItem,
+  WebviewPanel,
+  Uri,
+  ViewColumn,
+  languages,
+  Position,
+  Selection,
 } from 'vscode';
 
 import {
@@ -23,8 +29,99 @@ import {
 
 import { Readable } from 'stream';
 import * as process from 'process';
+import { Message, Signature } from './types';
 
 const baseName = 'Idris 2 LSP';
+
+/*
+TODO:
+- [x] show errors
+- show type at point (scope would be nice..)
+- [x] command to show docs.
+- [ ] update view when switching files
+- [ ] fill in view when C-c C-d pops it?
+- [ ] better styling
+*/
+
+class InfoViewPanel {
+  private static currentPanel : InfoViewPanel | undefined
+  public static readonly viewType = 'infoView';
+  private readonly _panel: WebviewPanel;
+  private readonly _extensionUri: Uri
+
+  private constructor(extensionUri: Uri) {
+    this._panel = window.createWebviewPanel(
+      InfoViewPanel.viewType,
+      'Idris Info View',
+      {viewColumn: ViewColumn.Beside, preserveFocus: true},
+      {
+        enableScripts: true,
+        localResourceRoots: [
+          Uri.joinPath(extensionUri, 'media'),
+          Uri.joinPath(extensionUri, 'out')
+        ]
+      }
+    );
+    this._extensionUri = extensionUri;
+    this._update();
+    this._panel.webview.onDidReceiveMessage(this.didReceiveMessage, this);
+    this._panel.onDidDispose(() => this.dispose(), null);
+  }
+
+  didReceiveMessage(ev: Message) {
+    console.log("MESSAGE", ev);
+    if (ev.select) {
+      const {uri, range: {start, end}} = ev.select;
+      const range = new Range(new Position(start.line, start.character), new Position(end.line, end.character));
+      const editor = window.visibleTextEditors.find(editor => editor.document.uri.toString() === uri);
+      if (editor) {
+        editor.revealRange(range);
+        editor.selection = new Selection(range.start, range.end);
+      } else {
+        window.showTextDocument(Uri.parse(uri), { selection: range, viewColumn: ViewColumn.One });
+      }
+    }
+  }
+
+  dispose() {
+    InfoViewPanel.currentPanel = undefined;
+    this._panel.dispose(); // ??
+  }
+
+  _update() {
+    const webview = this._panel.webview;
+    const appUri = webview.asWebviewUri(Uri.joinPath(this._extensionUri,'out','infoView.js'));
+    const cssUri = webview.asWebviewUri(Uri.joinPath(this._extensionUri,'media','infoView.css'));
+    webview.html = `
+      <html>
+      <head>
+          <link rel="stylesheet" href="${cssUri}">
+      </head>
+      <body>
+          <div id="root"></div>
+          <script src="${appUri}"></script>
+      </body>
+  </html>
+    `;
+  }
+  
+  static createOrShow(extensionUri: Uri) {
+    if (!InfoViewPanel.currentPanel) {
+      InfoViewPanel.currentPanel = new InfoViewPanel(extensionUri);
+    }
+    InfoViewPanel.currentPanel._panel.reveal(ViewColumn.Beside, true);
+  }
+
+  static async postMessage(data: any) {
+    console.log("POST",data);
+    if (InfoViewPanel.currentPanel) {
+      const webview = InfoViewPanel.currentPanel._panel.webview;
+      await webview.postMessage(data);
+    }
+  }
+  
+}
+
 
 export function activate(context: ExtensionContext) {
   const extensionConfig = workspace.getConfiguration("idris2-lsp");
@@ -35,7 +132,6 @@ export function activate(context: ExtensionContext) {
     if (!serverProcess || !serverProcess.pid) {
       return reject(`Launching server using command ${command} failed.`);
     }
-
     context.subscriptions.push({
       dispose: () => {
         sendExitCommandTo(serverProcess.stdin);
@@ -94,6 +190,32 @@ function registerCommandHandlersFor(client: LanguageClient, context: ExtensionCo
     },
     rangeBehavior: DecorationRangeBehavior.ClosedClosed
   });
+  let didSave = false;
+  context.subscriptions.push(workspace.onDidSaveTextDocument(async (ev) => {
+    // This is too early to run the command, stale data comes back.
+    // but the notification comes to often and gets in a loop, so we flag
+    // and run on the first instance of the notification after save.
+    didSave = true;
+  }));
+  context.subscriptions.push(languages.onDidChangeDiagnostics(async (ev) => {
+    console.log("NOTIFY", didSave);
+    const activeEditor = window.activeTextEditor;
+    if (!activeEditor || !didSave) return;
+    const uri = activeEditor.document.uri;
+    didSave = false;
+    
+    // this triggers didChangeDiagnostics...
+    // doing this in didSave is too early and doesn't seem to get up to date metadata
+    try {
+      console.log('GET METAS');
+      const metavars = await client.sendRequest("workspace/executeCommand", { command: "metavars", arguments: null });
+      console.log('get diagnostics');
+      const diagnostics = client.diagnostics.get(uri);
+      await InfoViewPanel.postMessage({uri: uri.toString(), diagnostics, metavars});
+    } catch (e) {
+      console.log("EXCEPT",e);
+    }
+  }));
   context.subscriptions.push(
     commands.registerTextEditorCommand(
       'idris2-lsp.action',
@@ -104,8 +226,24 @@ function registerCommandHandlersFor(client: LanguageClient, context: ExtensionCo
         }
         const res = await commands.executeCommand<CodeAction[]>('vscode.executeCodeActionProvider', editor.document.uri, editor.selection);
         console.log("ACTIONS:", typeof arg, arg);
-
-        if (arg.command == 'refine') {
+        // emacs has an "add clause" that would be nice to have.
+        if (arg.command == 'load') {
+          InfoViewPanel.createOrShow(context.extensionUri);
+          const uri = editor.document.uri;
+          const diagnostics = languages.getDiagnostics(uri);
+          console.log('got diagnostics, requesting metas', diagnostics);
+          const metavars = await client.sendRequest("workspace/executeCommand", { command: "metavars", arguments: null });
+          InfoViewPanel.postMessage({uri: uri.toString(), diagnostics, metavars});
+        } else if (arg.command == 'docs') {
+          const {line, character} = editor.selection.start;
+          const {signatures} = await client.sendRequest<{signatures:Signature[]}>('textDocument/signatureHelp', {
+            textDocument: {uri:editor.document.uri.toString()},
+            position: {line , character }
+          });
+          console.log('signatureHelp', res);
+          InfoViewPanel.createOrShow(context.extensionUri);
+          InfoViewPanel.postMessage({signatures});
+        } else if (arg.command == 'refine') {
           const intros = res.filter((x) => x.title.startsWith("Intro "));
           if (intros.length == 1) {
             workspace.applyEdit(intros[0].edit);
@@ -139,6 +277,12 @@ function registerCommandHandlersFor(client: LanguageClient, context: ExtensionCo
           }
         }
       }));
+  context.subscriptions.push(
+    commands.registerCommand(
+      'idris2-lsp.infoView',
+      () => InfoViewPanel.createOrShow(context.extensionUri)
+    )
+  );
   context.subscriptions.push(
     commands.registerTextEditorCommand(
       'idris2-lsp.repl.eval',
